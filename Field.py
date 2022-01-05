@@ -1,4 +1,3 @@
-
 class Field:
     '''
     Simple class for a 'field' type of feature dataset. Should not be constructed directly, should be returned through
@@ -11,16 +10,14 @@ class Field:
     :property width: (int) Field width, if specified, or 0.
     :property precision: (int) Field precision, if specified, or 0.
     '''
-
-    is_fid    = False
-    defn      = None
-    name      = ""
-    index     = -1
-    type      = None
-    width     = 0
-    precision = 0
-
     def __init__(self, is_fid=False, fdefn=None, field_name=None, lyr_defn=None, must_exist=True):
+        self.is_fid    = False
+        self.defn      = None
+        self.name      = ""
+        self.index     = -1
+        self.type      = None
+        self.width     = 0
+        self.precision = 0
         if is_fid:
             self.name = "FID"
             self.is_fid = True

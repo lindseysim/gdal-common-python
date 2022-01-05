@@ -2,7 +2,7 @@ import os
 from osgeo import ogr
 from .. import fields, features
 from . import _rectifyinputs as rectify
-from ._getlayer import get as _getLayer
+from ._getlayer import get as _get_layer
 
 
 def buffer(input_datasource, buffer_distance, output_path, overwrite=False):
@@ -15,9 +15,9 @@ def buffer(input_datasource, buffer_distance, output_path, overwrite=False):
            silently.
     :return: (ogr.DataSource) The output feature Datsource.
     '''
-    layer, ds = _getLayer(input_datasource, allow_path=True)
+    layer, ds = _get_layer(input_datasource, allow_path=True)
 
-    driver = features.getFeatureDriver(output_path)
+    driver = features.get_driver(output_path)
     if os.path.exists(output_path):
         if not overwrite:
             raise Exception("{0} already exists (to overwrite, set overwrite=True)".format(output_path))
@@ -34,16 +34,15 @@ def buffer(input_datasource, buffer_distance, output_path, overwrite=False):
         copyfields.append(fields.get(ds, fdefn))
 
     layer.SetNextByIndex(0)
-    feat = layer.GetNextFeature()
-    while feat:
+    for feat in layer:
         geom = feat.GetGeometryRef()
         buffgeom = geom.Buffer(buffer_distance)
         bufffeat = ogr.Feature(layer.GetLayerDefn())
         bufffeat.SetGeometry(buffgeom)
         for f in copyfields:
-            fields.setValue(bufffeat, f, fields.value(feat, f))
+            fields.set_value(bufffeat, f, fields.value(feat, f))
         buffer_layer.CreateFeature(bufffeat)
-        feat = layer.GetNextFeature()
+    del geom, feat, buffgeom, bufffeat
     layer.SetNextByIndex(0)
 
     if ds:
@@ -124,7 +123,7 @@ def identity(input_datasource, identity_datasource, output_path, tmp_reproj_path
     identity_layer = process_objs['method_layer']
     output_ds      = process_objs['output_ds']
     output_layer   = output_ds.GetLayer()
-    for field in fields.list(indentity_layer):
+    for field in fields.list(identity_layer):
         if not fields.exists(output_layer, field.name):
             fields.create(output_layer, field.name, field.type)
     input_layer.Identity(identity_layer, output_layer)
@@ -161,7 +160,7 @@ def intersection(input_datasource, intersect_datasource, output_path, tmp_reproj
     return output_ds
 
 
-def symDifference(input_datasource, diff_datasource, output_path, tmp_reproj_path=None, overwrite=False,
+def sym_difference(input_datasource, diff_datasource, output_path, tmp_reproj_path=None, overwrite=False,
                   delete_tmp_files=True):
     '''
     Perform symmetric difference on features features.
@@ -239,7 +238,7 @@ def update(input_datasource, update_datasource, output_path, tmp_reproj_path=Non
     return output_ds
 
 
-def nearTable(input_datasource, input_id_field, near_datasource, near_id_field, tmp_reproj_path=None, overwrite=False,
+def near_table(input_datasource, input_id_field, near_datasource, near_id_field, tmp_reproj_path=None, overwrite=False,
               delete_tmp_files=True, filter_callback=None):
     '''
     Get near table for every unique pair distance.

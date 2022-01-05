@@ -2,7 +2,7 @@ import os
 from osgeo import ogr
 from .. import features
 from .. import fields as fieldutils
-from ._getlayer import get as _getLayer
+from ._getlayer import get as _get_layer
 
 
 def singular(dataset, output_path, layer_name="dissolve", overwrite=False):
@@ -16,12 +16,11 @@ def singular(dataset, output_path, layer_name="dissolve", overwrite=False):
            silently.
     :return: (ogr.DataSource) The Datasource for the newly dissolved feature layer.
     '''
-    layer, ds = _getLayer(dataset, allow_path=True)
+    layer, ds = _get_layer(dataset, allow_path=True)
     srs = layer.GetSpatialRef()
     all_geoms = []
     layer.SetNextByIndex(0)
-    feat = layer.GetNextFeature()
-    while feat:
+    for feat in layer:
         geom = feat.GetGeometryRef()
         gtype = geom.GetGeometryType()
         if gtype == ogr.wkbPolygon:
@@ -36,7 +35,7 @@ def singular(dataset, output_path, layer_name="dissolve", overwrite=False):
             del poly
         else:
             raise Exception("Tool currently only supports polygons or multipolygons")
-        feat = layer.GetNextFeature()
+    del geom, feat
     layer.SetNextByIndex(0)
 
     del geom, feat, layer
@@ -52,7 +51,7 @@ def singular(dataset, output_path, layer_name="dissolve", overwrite=False):
         raise Exception("Error occurred during geometry union.")
     del geom, ugeom
 
-    driver = features.getFeatureDriver(output_path)
+    driver = features.get_driver(output_path)
     if os.path.exists(output_path):
         if not overwrite:
             raise Exception("{0} already exists (to overwrite, set overwrite=True)".format(output_path))
@@ -80,12 +79,11 @@ def singlepart(dataset, output_path, layer_name="dissolve-singlepart", overwrite
            silently.
     :return: (ogr.DataSource) The Datasource for the newly dissolved feature layer.
     '''
-    layer, ds = _getLayer(dataset, allow_path=True)
+    layer, ds = _get_layer(dataset, allow_path=True)
     srs = layer.GetSpatialRef()
     all_geoms = []
     layer.SetNextByIndex(0)
-    feat = layer.GetNextFeature()
-    while feat:
+    for feat in layer:
         geom = feat.GetGeometryRef()
         gtype = geom.GetGeometryType()
         if gtype == ogr.wkbPolygon:
@@ -99,10 +97,10 @@ def singlepart(dataset, output_path, layer_name="dissolve-singlepart", overwrite
                 g += 1
         else:
             raise Exception("Tool currently only supports polygons or multipolygons")
-        feat = layer.GetNextFeature()
+    del geom, feat
     layer.SetNextByIndex(0)
 
-    del geom, feat, layer
+    del layer
     if ds:
         ds.Release()
         del ds
@@ -144,7 +142,7 @@ def singlepart(dataset, output_path, layer_name="dissolve-singlepart", overwrite
 
     del all_geoms, gids_processed
 
-    driver = features.getFeatureDriver(output_path)
+    driver = features.get_driver(output_path)
     if os.path.exists(output_path):
         if not overwrite:
             raise Exception("{0} already exists (to overwrite, set overwrite=True)".format(output_path))
@@ -157,14 +155,14 @@ def singlepart(dataset, output_path, layer_name="dissolve-singlepart", overwrite
     for geom_and_count in unioned_geoms:
         feat = ogr.Feature(defn)
         feat.SetGeometry(geom_and_count[0])
-        fieldutils.setValue(feat, count_field, geom_and_count[1])
+        fieldutils.set_value(feat, count_field, geom_and_count[1])
         layer.CreateFeature(feat)
 
     del count_field, feat, layer, unioned_geoms
     return ds
 
 
-def onField(dataset, output_path, on_fields, singlepart=False, layer_name="dissolve-onfield", overwrite=False):
+def on_field(dataset, output_path, on_fields, singlepart=False, layer_name="dissolve-onfield", overwrite=False):
     '''
     Dissolve all features in a dataset by a field or fields.
     :param dataset: (ogr.DataSource|ogr.Layer|str) The feature datasource to dissolve, provided as ogr.DataSource,
@@ -180,7 +178,7 @@ def onField(dataset, output_path, on_fields, singlepart=False, layer_name="disso
            silently.
     :return: (ogr.DataSource) The Datasource for the newly dissolved feature layer.
     '''
-    layer, ds = _getLayer(dataset, allow_path=True)
+    layer, ds = _get_layer(dataset, allow_path=True)
     srs = layer.GetSpatialRef()
     if not isinstance(on_fields, list):
         on_fields = [on_fields]
@@ -193,8 +191,7 @@ def onField(dataset, output_path, on_fields, singlepart=False, layer_name="disso
 
     f = -1
     layer.SetNextByIndex(0)
-    feat = layer.GetNextFeature()
-    while feat:
+    for feat in layer:
         f += 1
         values = [fieldutils.value(feat, field) for field in fields]
 
@@ -215,7 +212,7 @@ def onField(dataset, output_path, on_fields, singlepart=False, layer_name="disso
         else:
             feature_groups[matched].append(f)
 
-        feat = layer.GetNextFeature()
+    del feat
     layer.SetNextByIndex(0)
 
     unioned_geoms = []
@@ -280,7 +277,7 @@ def onField(dataset, output_path, on_fields, singlepart=False, layer_name="disso
         ds.Release()
         del layer, ds
 
-    driver = features.getFeatureDriver(output_path)
+    driver = features.get_driver(output_path)
     if os.path.exists(output_path):
         if not overwrite:
             raise Exception("{0} already exists (to overwrite, set overwrite=True)".format(output_path))
@@ -297,8 +294,8 @@ def onField(dataset, output_path, on_fields, singlepart=False, layer_name="disso
         feat = ogr.Feature(defn)
         feat.SetGeometry(ugeom)
         for i in range(len(fields)):
-            fieldutils.setValue(feat, fields[i], unique_sets[igroup][i])
-        fieldutils.setValue(feat, count_field, num_union)
+            fieldutils.set_value(feat, fields[i], unique_sets[igroup][i])
+        fieldutils.set_value(feat, count_field, num_union)
         layer.CreateFeature(feat)
 
     del driver, defn, layer

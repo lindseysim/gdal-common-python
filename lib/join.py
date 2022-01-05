@@ -39,8 +39,7 @@ def intersect(input_datasource, input_id_field, join_datasource, join_fields, tm
 
     join_map = {}
     input_layer.SetNextByIndex(0)
-    feat = input_layer.GetNextFeature()
-    while feat:
+    for feat in input_layer:
         geom = feat.GetGeometryRef()
         if geom:
             id = fields.value(feat, id_field)
@@ -54,8 +53,7 @@ def intersect(input_datasource, input_id_field, join_datasource, join_fields, tm
                     join_map[id].append({f.name: fields.value(jfeat, f) for f in join_fields})
                 jfeat = join_layer.GetNextFeature()
             join_layer.SetNextByIndex(0)
-
-        feat = input_layer.GetNextFeature()
+    del feat
     input_layer.SetNextByIndex(0)
 
     rectify.cleanup(process_objs, delete_tmp_files)

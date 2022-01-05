@@ -1,10 +1,11 @@
-from .. import features, fields
+from .. import fields
+from .. import features as featutils
 from .. import rasters as rasterutils
-from ._getlayer import get as _getLayer
-from .conversion import featureToArray
+from ._getlayer import get as _get_layer
+from . import conversion
 
 
-def extractFeatures(input_datasource, validation_func, output_path, overwrite=False):
+def features(input_datasource, validation_func, output_path, overwrite=False):
     '''
     Extract features from a datasource using a callback function.
     :param input_datasource:  (ogr.DataSource|ogr.Layer|str) The feature datasource to extract from, provided as
@@ -16,9 +17,9 @@ def extractFeatures(input_datasource, validation_func, output_path, overwrite=Fa
            silently.
     :return:
     '''
-    input_layer, ds  = _getLayer(input_datasource, allow_path=True)
+    input_layer, ds  = _get_layer(input_datasource, allow_path=True)
     input_datasource = input_datasource if not ds else ds
-    output_ds        = features.copyFeatureDataSourceAsEmpty(input_datasource, output_path, overwrite)
+    output_ds        = featutils.copy_datasource_as_empty(input_datasource, output_path, overwrite)
     output_layer     = output_ds.GetLayer()
 
     input_layer.SetNextByIndex(0)
@@ -36,9 +37,9 @@ def extractFeatures(input_datasource, validation_func, output_path, overwrite=Fa
     return output_ds
 
 
-def selectFeatures(input_datasource, on_fields, validation_func, output_path, overwrite=False):
+def features_with_callback(input_datasource, on_fields, validation_func, output_path, overwrite=False):
     '''
-    Extract features from a datasource using a callback function. Difference from extractFeatures() is that field values
+    Extract features from a datasource using a callback function. Difference from extract() is that field values
     are read and provided to callback function.
     :param input_datasource: (ogr.DataSource|ogr.Layer|str) The feature datasource to extract from, provided as
            ogr.DataSource, ogr.Layer, or filepath.
@@ -53,9 +54,9 @@ def selectFeatures(input_datasource, on_fields, validation_func, output_path, ov
            silently.
     :return:
     '''
-    input_layer, ds  = _getLayer(input_datasource, allow_path=True)
+    input_layer, ds  = _get_layer(input_datasource, allow_path=True)
     input_datasource = input_datasource if not ds else ds
-    output_ds        = features.copyFeatureDataSourceAsEmpty(input_datasource, output_path, overwrite)
+    output_ds        = featutils.copy_datasource_as_empty(input_datasource, output_path, overwrite)
     output_layer     = output_ds.GetLayer()
     copy_fields      = [fields.get(input_layer, f) for f in on_fields]
 
@@ -75,7 +76,7 @@ def selectFeatures(input_datasource, on_fields, validation_func, output_path, ov
     return output_ds
 
 
-def getPixelsByFeatureMask(raster, band, feature, ignore_values=None):
+def pixels_by_feature_mask(raster, band, feature, ignore_values=None):
     '''
     Get all pixel-values in raster that are overlapped by the given feature.
     :param raster: (gdal.Dataset) The GDAL Dataset to pull pixel values.
@@ -86,15 +87,15 @@ def getPixelsByFeatureMask(raster, band, feature, ignore_values=None):
     :return: Array of pixel values.
     '''
     # get overlapping/snapped window to compare feature and raster
-    origin, resolution, offset, pixel_size = getFeatureToRasterWindow(raster, feature)
+    origin, resolution, offset, pixel_size = feature_to_raster_window(raster, feature)
     if origin is None:
         return []
     # rasterize (array-ize?) feature in window
-    polyArray = featureToArray(feature, origin, pixel_size, resolution)
-    return getPixelsByMaskArray(raster, band, polyArray, offset, resolution, ignore_values)
+    polyArray = conversion.feature.to_array(feature, origin, pixel_size, resolution)
+    return pixels_by_mask_array(raster, band, polyArray, offset, resolution, ignore_values)
 
 
-def getPixelsByMaskArray(raster, band, mask, offset, resolution=None, ignore_values=None):
+def pixels_by_mask_array(raster, band, mask, offset, resolution=None, ignore_values=None):
     '''
     Get all pixel-values in raster using a raster/array mask.
     :param raster: (gdal.Dataset) The GDAL Dataset to pull pixel values.
@@ -112,7 +113,7 @@ def getPixelsByMaskArray(raster, band, mask, offset, resolution=None, ignore_val
     if resolution is None:
         resolution = [mask.shape[1], mask.shape[0]]
     # read raster values in window
-    pixels = rasterutils.readRaster(raster, band, offset[0], offset[1], resolution[0], resolution[1])
+    pixels = rasterutils.read(raster, band, offset[0], offset[1], resolution[0], resolution[1])
     # empty list of valid pixel values
     values = []
     # loop by lines then pixels, pull raster value if feature presence exists
@@ -130,7 +131,7 @@ def getPixelsByMaskArray(raster, band, mask, offset, resolution=None, ignore_val
     return values
 
 
-def getFeatureToRasterWindow(raster, feature):
+def feature_to_raster_window(raster, feature):
     '''
     Given a feature which overlaps a raster, find the geotransformation for the pixel window of the overlap, snapping to
     the raster grid and pixel size.
@@ -140,12 +141,12 @@ def getFeatureToRasterWindow(raster, feature):
              corresponding to window on raster that overlaps the feature provided.
     '''
     # get raster information
-    origin, pixel_size, extent = rasterutils.getRasterTransform(raster)
+    origin, pixel_size, extent = rasterutils.get_transform(raster)
     width = extent[0]
     height = extent[1]
     raster_band = raster.GetRasterBand(1)
     # get feature information
-    xmin, xmax, ymin, ymax = features.getFeatureExtent(feature)
+    xmin, xmax, ymin, ymax = featutils.get_extent(feature)
     # snap x-origin to raster grid and crop to minimum corner
     if xmin < origin[0]:
         xmin = origin[0]

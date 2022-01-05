@@ -1,9 +1,11 @@
 import math
-from osgeo import gdal, ogr
-from .. import features, fields
+from osgeo import gdal
+from ..Field import Field
+from ._getlayer import get as _get_layer
+from .. import fields
 from .. import rasters as rasterutils
-from .conversion import featureToArray
-from .extract import getPixelsByFeatureMask, getPixelsByMaskArray, getFeatureToRasterWindow
+from . import conversion
+from . import extract
 
 
 def statistics(feature_data, rasters, bands=None,
@@ -44,7 +46,7 @@ def statistics(feature_data, rasters, bands=None,
             continue
         # if string given, try to open as filepath to a raster
         if isinstance(rast, str):
-            rasters[i] = rasterutils.getRasterAsGdal(rast)
+            rasters[i] = rasterutils.get_dataset(rast)
         else:
             assert isinstance(rast, gdal.Dataset)
 
@@ -70,7 +72,7 @@ def statistics(feature_data, rasters, bands=None,
     for rast in rasters:
         if rast is None:
             continue
-        origin, pixel_size, extent = rasterutils.getRasterTransform(rast)
+        origin, pixel_size, extent = rasterutils.get_transform(rast)
         width = extent[0]
         height = extent[1]
         if check_transform is None:
@@ -94,35 +96,18 @@ def statistics(feature_data, rasters, bands=None,
             for val in ignore_values:
                 assert isinstance(val, (int, float))
 
-    # get feature layer object (flexible in input parameters)
-    if isinstance(feature_data, ogr.DataSource):
-        # is datasource, get layer
-        feature_layer = feature_data.GetLayer()
-    elif isinstance(feature_data, ogr.Layer):
-        # is already feature layer
-        feature_layer = feature_data
-    elif isinstance(feature_data, str):
-        # is string, try to open as filepath
-        feature_data = features.getFeatureDataset(feature_data)
-        feature_layer = feature_data.GetLayer()
-    else:
-        raise Exception("Feature dataset is not filepath, OGR Dataset, or OGR Layer")
+    # get feature layer object
+    feature_layer, feature_data = _get_layer(feature_data)
 
     # get unique field and type for feature layer
     if unique_field is None:
-        unique_field, unique_field_index, unique_field_type = fields.getUnique(feature_layer, unique_field)
+        unique_field = Field(True)
     else:
-        defn = feature_layer.GetLayerDefn()
-        unique_field_index = defn.GetFieldIndex(unique_field)
-        f_defn = defn.GetFieldDefn(unique_field_index)
-        unique_field_type = f_defn.GetFieldTypeName(f_defn.GetType())
-    unique_field_type = unique_field_type.lower()
+        unique_field = fields.get(feature_layer, unique_field)
 
     # get name field and type
-    name_field_type = None
     if name_field:
         name_field = fields.get(feature_layer, name_field)
-        name_field_type = name_field['type'].lower()
 
     # check input statistics
     if statistics is None or len(statistics) == 0:
@@ -138,27 +123,9 @@ def statistics(feature_data, rasters, bands=None,
     feature_layer.SetNextByIndex(0)
     for feature in feature_layer:
         row = {}
-
-        # get unique field value
-        if unique_field_type == "real":
-            row[unique_field] = feature.GetFieldAsDouble(unique_field_index)
-        elif unique_field_type == "integer":
-            row[unique_field] = feature.GetFieldAsInteger(unique_field_index)
-        elif unique_field_type == "datetime":
-            row[unique_field] = feature.GetFieldAsDateTime(unique_field_index)
-        else:
-            row[unique_field] = feature.GetFieldAsString(unique_field_index)
-
-        # get name field values
+        row[unique_field] = fields.value(feature, unique_field)
         if name_field:
-            if name_field_type == "real":
-                row[name_field] = feature.GetFieldAsDouble(name_field['index'])
-            elif name_field_type == "integer":
-                row[name_field] = feature.GetFieldAsInteger(name_field['index'])
-            elif name_field_type == "datetime":
-                row[name_field] = feature.GetFieldAsDateTime(name_field['index'])
-            else:
-                row[name_field] = feature.GetFieldAsString(name_field['index'])
+            row[name_field] = fields.value(feature, name_field)
 
         # if all rasters have same geotransform, we only need to get the window and polygon as array once so 
         # pre-create
@@ -166,8 +133,8 @@ def statistics(feature_data, rasters, bands=None,
         if identical_rasters:
             for raster in rasters:
                 if raster is not None:
-                    origin, resolution, offset, pixel_size = getFeatureToRasterWindow(raster, feature)
-                    poly_array = featureToArray(feature, origin, pixel_size, resolution)
+                    origin, resolution, offset, pixel_size = extract.feature_to_raster_window(raster, feature)
+                    poly_array = conversion.feature.to_array(feature, origin, pixel_size, resolution)
                     break
 
         # empty list of pixels to be added to
@@ -180,10 +147,10 @@ def statistics(feature_data, rasters, bands=None,
             if rasters[i] is not None:
                 if identical_rasters:
                     # if identical, use the values already created
-                    add_pixels = getPixelsByMaskArray(rasters[i], bands[i], poly_array, offset, resolution, ignore_values)
+                    add_pixels = extract.pixels_by_mask_array(rasters[i], bands[i], poly_array, offset, resolution, ignore_values)
                 else:
                     # if not identical, create new window and feature as array for each raster just in case
-                    add_pixels = getPixelsByFeatureMask(rasters[i], bands[i], feature, ignore_values)
+                    add_pixels = extract.pixels_by_feature_mask(rasters[i], bands[i], feature, ignore_values)
                 pixel_count = len(add_pixels)
                 pixels += add_pixels
             if len(rasters) > 1:
@@ -197,6 +164,10 @@ def statistics(feature_data, rasters, bands=None,
         # append and iterate
         table.append(row)
         count += 1
+
+    if feature_data:
+        feature_data.Release()
+        del feature_data
 
     return table
 

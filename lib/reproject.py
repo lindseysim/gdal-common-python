@@ -1,11 +1,12 @@
 import os
 import math
 from osgeo import gdal, ogr, osr
-from ._getlayer import get as _getLayer
-from .. import features, rasters
+from ._getlayer import get as _get_layer
+from .. import rasters
+from .. import features as featutils
 
 
-def reprojectFeatures(input_datasource, output_path, to_srs, overwrite=False):
+def features(input_datasource, output_path, to_srs, overwrite=False):
     '''
     Reproject a feature datasource.
     :param input_datasource: (ogr.DataSource|ogr.Layer|str) The feature datasource to reprojected, provided as
@@ -16,14 +17,14 @@ def reprojectFeatures(input_datasource, output_path, to_srs, overwrite=False):
            silently.
     :return:
     '''
-    input_layer, ds  = _getLayer(input_datasource, allow_path=True)
+    input_layer, ds  = _get_layer(input_datasource, allow_path=True)
     input_datasource = input_datasource if not ds else input_datasource
     layer_defn       = input_layer.GetLayerDefn()
 
     from_srs  = input_layer.GetSpatialRef()
     transform = osr.CoordinateTransformation(from_srs, to_srs)
 
-    reproj_ds    = features.copyFeatureDataSourceAsEmpty(input_datasource, output_path, overwrite=overwrite, new_srs=to_srs)
+    reproj_ds    = featutils.copy_datasource_as_empty(input_datasource, output_path, overwrite=overwrite, new_srs=to_srs)
     reproj_layer = reproj_ds.GetLayer()
 
     in_feature = input_layer.GetNextFeature()
@@ -47,7 +48,7 @@ def reprojectFeatures(input_datasource, output_path, to_srs, overwrite=False):
     return reproj_ds
 
 
-def reprojectRaster(input_raster, output_path, gdal_data_type=None, to_srs=None, new_cellsize=None,
+def raster(input_raster, output_path, gdal_data_type=None, to_srs=None, new_cellsize=None,
                     interpolation=gdal.GRA_NearestNeighbour, overwrite=False):
     '''
     Reproject or resample a raster dataset.
@@ -72,13 +73,13 @@ def reprojectRaster(input_raster, output_path, gdal_data_type=None, to_srs=None,
         transform = None
         to_srs = from_srs
 
-    driver = rasters.getRasterDriver(output_path)
+    driver = rasters.get_driver(output_path)
     if os.path.exists(output_path):
         if not overwrite:
             raise Exception("{0} already exists (to overwrite, set overwrite=True)".format(output_path))
         driver.Delete(output_path)
 
-    origin, pixel_size, extent = rasters.getRasterTransform(input_raster)
+    origin, pixel_size, extent = rasters.get_transform(input_raster)
     far_corner = [origin[0] + pixel_size[0] * extent[0], origin[1] + pixel_size[1] * extent[1]]
 
     reproj_top_left = transform.TransformPoint(origin[0], origin[1]) if transform else (origin[0], origin[1])
@@ -106,10 +107,10 @@ def reprojectRaster(input_raster, output_path, gdal_data_type=None, to_srs=None,
     reproj_height = abs(math.ceil((min_max_y[1] - min_max_y[0]) / float(new_cellsize[1])))
 
     reproj_raster = driver.Create(output_path, int(reproj_width), int(reproj_height), input_raster.RasterCount, gdal_data_type)
-    reproj_raster.SetGeoTransform(rasters.createRasterTransform(reproj_origin, new_cellsize))
+    reproj_raster.SetGeoTransform(rasters.create_transform(reproj_origin, new_cellsize))
     reproj_raster.SetProjection(to_srs.ExportToWkt())
 
-    rp = gdal.ReprojectImage(input_raster, reproj_raster, from_srs.ExportToWkt(), to_srs.ExportToWkt(), interpolation)
+    rpe = gdal.ReprojectImage(input_raster, reproj_raster, from_srs.ExportToWkt(), to_srs.ExportToWkt(), interpolation)
 
     check_color_table = gdal_data_type == gdal.GDT_UInt16 or gdal_data_type == gdal.GDT_Byte
     for b in range(input_raster.RasterCount):

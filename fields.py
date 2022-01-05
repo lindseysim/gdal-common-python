@@ -1,7 +1,7 @@
 from osgeo import ogr
-from datetime import datetime
-from .lib._getlayer import get as _getLayer
-from .Field import Field
+from date import date
+from lib._getlayer import get as _get_layer
+from Field import Field
 
 
 # type name gets overwritten by method so reassign for later use
@@ -32,7 +32,7 @@ def definition(datasource, field_name=None):
     :return: (ogr.FieldDefn|ogr.FieldDefn[]) The field definition (or None if not found), or a list of all fields as
              field definition if no specific field name provided.
     '''
-    layer, ds = _getLayer(datasource, allow_path=True)
+    layer, ds = _get_layer(datasource, allow_path=True)
     defn = layer.GetLayerDefn()
     def _final(ds, ret=None):
         if ds:
@@ -58,7 +58,7 @@ def list(datasource):
            filepath.
     :return: (common.Field[]) List of Field instances.
     '''
-    layer, ds = _getLayer(datasource, allow_path=True)
+    layer, ds = _get_layer(datasource, allow_path=True)
     defn = layer.GetLayerDefn()
     fields = []
     for i in range(defn.GetFieldCount()):
@@ -89,7 +89,7 @@ def find(datasource, field_name):
     :param field_name: (str) The field name to search for.
     :return: (common.Field) The field instance, or None if not present in datasource.
     '''
-    layer, ds = _getLayer(datasource, allow_path=True)
+    layer, ds = _get_layer(datasource, allow_path=True)
     defn = layer.GetLayerDefn()
     match = False
     for i in range(defn.GetFieldCount()):
@@ -117,7 +117,7 @@ def get(datasource, field, must_exist=True):
         return field
     if isinstance(field, Field):
         return field
-    layer, ds = _getLayer(datasource, allow_path=True)
+    layer, ds = _get_layer(datasource, allow_path=True)
     defn = layer.GetLayerDefn()
     try:
         if isinstance(field, ogr.FieldDefn):
@@ -149,7 +149,7 @@ def value(feature, field):
         return feature.GetFieldAsInteger(field.index)
     elif field.type in ("Real", ogr.OFTReal, float):
         return feature.GetFieldAsDouble(field.index)
-    elif field.type in ("DateTime", "Date", ogr.OFTDate, ogr.OFTDateTime, datetime):
+    elif field.type in ("DateTime", "Date", ogr.OFTDate, ogr.OFTDateTime, date):
         return feature.GetFieldAsDateTime(field.index)
     else:
         raise Exception("Unrecognized field type: {0}".format(field.type))
@@ -166,7 +166,7 @@ def values(datasource, fields):
     '''
     if not isinstance(fields, (_list, tuple)):
         fields = [fields]
-    layer, ds = _getLayer(datasource, allow_path=True)
+    layer, ds = _get_layer(datasource, allow_path=True)
     fields = [get(layer, f) for f in fields]
 
     def build_lambda(for_field):
@@ -180,29 +180,28 @@ def values(datasource, fields):
             return lambda feat: feat.GetFieldAsInteger(for_field.index)
         elif for_field.type in ("Real", ogr.OFTReal, float):
             return lambda feat: feat.GetFieldAsDouble(for_field.index)
-        elif for_field.type in ("DateTime", "Date", ogr.OFTDate, ogr.OFTDateTime, datetime):
+        elif for_field.type in ("DateTime", "Date", ogr.OFTDate, ogr.OFTDateTime, date):
             return lambda feat: feat.GetFieldAsDateTime(for_field.index)
         else:
             raise Exception("Unrecognized field type: {0}".format(for_field.type))
 
     lambdas = {f.name: build_lambda(f) for f in fields}
 
-    values = []
+    fvalues = []
     layer.SetNextByIndex(0)
-    feature = layer.GetNextFeature()
-    while feature:
-        values.append({fname: getter(feature) for fname, getter in lambdas.items()})
-        feature = layer.GetNextFeature()
+    for feat in layer:
+        fvalues.append({fname: getter(feat) for fname, getter in lambdas.items()})
+    del feat
     layer.SetNextByIndex(0)
 
     if ds:
         ds.Release()
         del layer, ds
 
-    return values
+    return fvalues
 
 
-def setValue(feature, field, value):
+def set_value(feature, field, value):
     '''
     Set the value of a field, for a particular feature.
     :param feature: (ogr.Feature) The feature to set the value of.
@@ -219,7 +218,11 @@ def setValue(feature, field, value):
         feature.SetField(field.name, value)
 
 
-def createDefinition(name, field_type, width=0, precision=0):
+def create_defn(name, field_type, width=0, precision=0):
+    return create_definition(name, field_type, width, precision)
+
+
+def create_definition(name, field_type, width=0, precision=0):
     '''
     Create an ogr.FieldDefn.
     :param name: (str) The field name.
@@ -236,7 +239,7 @@ def createDefinition(name, field_type, width=0, precision=0):
         ogr_type = ogr.OFTInteger64
     elif field_type == float:
         ogr_type = ogr.OFTReal
-    elif field_type == datetime:
+    elif field_type == date:
         ogr_type = ogr.OFTDateTime
     elif isinstance(field_type, str):
         if field_type == "String":
@@ -296,8 +299,8 @@ def add(datasource, name, type, width=0, precision=0):
     :param [precision]: (int) The field precision.
     :return: (common.Field) The new field as a Field instance.
     '''
-    layer, ds = _getLayer(datasource, allow_path=True, for_write=True)
-    defn = createDefinition(name, type, width, precision)
+    layer, ds = _get_layer(datasource, allow_path=True, for_write=True)
+    defn = create_definition(name, type, width, precision)
     layer.CreateField(defn)
     field = get(layer, defn)
     if ds:
@@ -319,7 +322,7 @@ def calculate(datasource, on_field, use_fields, calc_callback):
            three parameters: `i` (feature index), `feat` (the ogr.Feature instance), and `values` (list) a list of
            values for the feature corresponding to `use_field`.
     '''
-    layer, ds = _getLayer(datasource, allow_path=True, for_write=True)
+    layer, ds = _get_layer(datasource, allow_path=True, for_write=True)
     field = get(layer, on_field)
 
     if use_fields and len(use_fields):
@@ -328,13 +331,12 @@ def calculate(datasource, on_field, use_fields, calc_callback):
         get_fields = None
 
     layer.SetNextByIndex(0)
-    feat = layer.GetNextFeature()
     i = 0
-    while feat:
-        values = [value(feat, field) for field in get_fields] if get_fields else []
-        setValue(feat, field, calc_callback(i, feat, values))
-        feat = layer.GetNextFeature()
+    for feat in layer:
+        fvalues = [value(feat, field) for field in get_fields] if get_fields else []
+        set_value(feat, field, calc_callback(i, feat, fvalues))
         i += 1
+    del feat
     layer.SetNextByIndex(0)
 
     if ds:
@@ -342,7 +344,7 @@ def calculate(datasource, on_field, use_fields, calc_callback):
         del layer, ds
 
 
-def calcGeometry(datasource, field_name, units):
+def calc_geometry(datasource, field_name, units):
     '''
     Calculate a geometry field (e.g. length or area) for all features in a datasource.
     :param datasource: (ogr.DataSource|ogr.Layer|str) The feature datasource, provided as ogr.DataSource, ogr.Layer, or
@@ -351,7 +353,7 @@ def calcGeometry(datasource, field_name, units):
     :param units: (int) The geometry unit type. See constants in this module.
     :return:
     '''
-    layer, ds = _getLayer(datasource, allow_path=True, for_write=True)
+    layer, ds = _get_layer(datasource, allow_path=True, for_write=True)
     try:
         srs = layer.GetSpatialRef()
         if not srs.IsProjected():
@@ -440,9 +442,9 @@ def join(datasource, on_field, join_datasource, to_field, join_fields, error_if_
     :param [error_if_many=True]: If True, errors if there are joins that break the one-to-one relationship. If False,
            the joined data will simply be from the last valid join found for each feature, if multiple joins exist.
     '''
-    og_layer, ds1 = _getLayer(datasource, allow_path=True, for_write=True)
+    og_layer, ds1 = _get_layer(datasource, allow_path=True, for_write=True)
     og_field      = get(og_layer, on_field)
-    to_layer, ds2 = _getLayer(join_datasource)
+    to_layer, ds2 = _get_layer(join_datasource)
     to_field      = get(to_layer, to_field)
     join_fields   = [get(to_layer, f) for f in join_fields]
 
@@ -457,14 +459,13 @@ def join(datasource, on_field, join_datasource, to_field, join_fields, error_if_
 
     i = 0
     to_layer.SetNextByIndex(0)
-    feat = to_layer.GetNextFeature()
-    while feat:
-        join = value(to_layer, to_field)
-        if join in join_map and error_if_many:
+    for feat in to_layer:
+        join_on = value(feat, to_field)
+        if join_on in join_map and error_if_many:
             raise Exception("Value ({0}) has more than one join in join datasource.".format(join))
-        join_map[join] = i
-        feat = to_layer.GetNextFeature()
+        join_map[join_on] = i
         i += 1
+    del feat
     to_layer.SetNextByIndex(0)
 
     copy_fields = []
@@ -481,15 +482,14 @@ def join(datasource, on_field, join_datasource, to_field, join_fields, error_if_
             copy_fields.append(create(og_layer, join_fid_field_name, int))
 
     og_layer.SetNextByIndex(0)
-    og_feat = og_layer.GetNextFeature()
-    while og_feat:
-        og_feat = og_layer.GetNextFeature()
-        join = value(og_layer, og_field)
-        if join not in join_map:
+    for og_feat in og_layer:
+        join_to = value(og_layer, og_field)
+        if join_to not in join_map:
             continue
-        join_feat = to_layer.GetFeature(join_map[join])
+        join_to_feat = to_layer.GetFeature(join_map[join_to])
         for f in range(len(join_fields)):
-            setValue(og_feat, copy_fields[f], value(join_feat, join_fields[f]))
+            set_value(og_feat, copy_fields[f], value(join_to_feat, join_fields[f]))
+    del og_feat
     og_layer.SetNextByIndex(0)
 
     if ds1:

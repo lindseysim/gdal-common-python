@@ -8,7 +8,7 @@ GEODATABASE_DRIVER_NAME = "OpenFileGDB"  # "FileGDB"
 SDE_DRIVER_NAME = "SDE"
 
 
-def _getLayer(datasource, for_write=False, allow_path=False):
+def _get_layer(datasource, for_write=False, allow_path=False):
     '''
     Copied from lib._getlayer.py (otherwise circular import results)
     '''
@@ -17,14 +17,14 @@ def _getLayer(datasource, for_write=False, allow_path=False):
     elif isinstance(datasource, ogr.Layer):
         return datasource, None
     elif allow_path and isinstance(datasource, str):
-        datasource = features.getFeatureDataSource(datasource, write=for_write)
+        datasource = get_datasource(datasource, write=for_write)
         layer = datasource.GetLayer()
         return layer, datasource
     else:
         raise Exception("Must supply ogr DataSource or Layer as input")
 
 
-def guessFeatureDriver(path):
+def guess_driver(path):
     '''
     Guess feature driver by filename (or database conn string). Limited support, still needs fleshing out. Defaults to
     shapefile if it cannot be correctly determined.
@@ -43,17 +43,25 @@ def guessFeatureDriver(path):
         return SHAPEFILE_DRIVER_NAME
 
 
-def getFeatureDriver(path):
+def driver(path):
+    return get_driver(path)
+
+
+def get_driver(path):
     '''
     Get feature driver by filename (or database conn string). Limited support, still needs fleshing out. Defaults to
     shapefile if it cannot be correctly determined.
     :param path: (str) Filepath or conn string.
     :return: (ogr.Driver)
     '''
-    return ogr.GetDriverByName(guessFeatureDriver(path))
+    return ogr.GetDriverByName(guess_driver(path))
 
 
-def getFeatureDataSource(path_or_datasource, driver_name=None, write=False):
+def datasource(path_or_datasource, driver_name=None, write=False):
+    return get_datasource(path_or_datasource, driver_name, write)
+
+
+def get_datasource(path_or_datasource, driver_name=None, write=False):
     '''
     Get feature datasource as ogr.DataSource instance.
     :param path_or_datasource: (str|ogr.DataSource) The filepath. If provided as DataSource already, just returns that.
@@ -64,11 +72,15 @@ def getFeatureDataSource(path_or_datasource, driver_name=None, write=False):
     '''
     if isinstance(path_or_datasource, ogr.DataSource):
         return path_or_datasource
-    driver = getFeatureDriver(path_or_datasource) if driver_name is None else ogr.GetDriverByName(driver_name)
+    driver = get_driver(path_or_datasource) if driver_name is None else ogr.GetDriverByName(driver_name)
     return driver.Open(path_or_datasource, 1 if write else 0)
 
 
-def getFeatureExtent(feature):
+def extent(feature):
+    return get_extent(feature)
+
+
+def get_extent(feature):
     '''
     Get the feature extent/envelope.
     :param feature: (ogr.Feature) Feature of interest.
@@ -82,7 +94,7 @@ def getFeatureExtent(feature):
     return xmin, xmax, ymin, ymax
 
 
-def copyFeatureDataSourceAsEmpty(copy_datasource, output_path, overwrite=False, new_srs=None, new_geom_type=None):
+def copy_datasource_as_empty(copy_datasource, output_path, overwrite=False, new_srs=None, new_geom_type=None):
     '''
     Copy a feature datasource as empty. That is, creates empty copy with same spatial reference system and fields, but
     with no features.
@@ -96,8 +108,8 @@ def copyFeatureDataSourceAsEmpty(copy_datasource, output_path, overwrite=False, 
            must be from one of the constant values in OGR relevant to geometry types (e.g. `ogr.wkbPolygon`).
     :return: (ogr.DataSource) The DataSource instance of the new, copied datasource.
     '''
-    copy_layer, copy_ds = _getLayer(copy_datasource, allow_path=True)
-    driver = getFeatureDriver(output_path)
+    copy_layer, copy_ds = _get_layer(copy_datasource, allow_path=True)
+    driver = get_driver(output_path)
     if os.path.exists(output_path):
         if not overwrite:
             raise Exception("{0} already exists (to overwrite, set overwrite=True)".format(output_path))
@@ -123,7 +135,7 @@ def copyFeatureDataSourceAsEmpty(copy_datasource, output_path, overwrite=False, 
     return ds
 
 
-def createFeatureDataSource(output_path, layer_name, srs, geom_type, add_fields=None, overwrite=False):
+def create_datasource(output_path, layer_name, srs, geom_type, add_fields=None, overwrite=False):
     '''
     Create a new feature datasource.
     :param output_path: (str) The output path to save the new datasource at.
@@ -136,7 +148,7 @@ def createFeatureDataSource(output_path, layer_name, srs, geom_type, add_fields=
            silently.
     :return: (ogr.DataSource) The DataSource instance of the new datasource.
     '''
-    driver = getFeatureDriver(output_path)
+    driver = get_driver(output_path)
     if os.path.exists(output_path):
         if not overwrite:
             raise Exception("{0} already exists (to overwrite, set overwrite=True)".format(output_path))
@@ -159,7 +171,7 @@ def count(datasource):
            ogr.DataSource, ogr.Layer, or filepath.
     :return: (int)
     '''
-    layer, ds = _getLayer(datasource, allow_path=True)
+    layer, ds = _get_layer(datasource, allow_path=True)
     count = layer.GetFeatureCount()
     if ds:
         ds.Release()
@@ -167,7 +179,7 @@ def count(datasource):
     return count
 
 
-def forEachFeature(datasource, callback, for_write=False):
+def for_each_feature(datasource, callback, for_write=False):
     '''
     Run a callback function on each feature in a datasource.
     :param datasource: (ogr.DataSource|ogr.Layer|str) The feature datasource of interest. May be provided as
@@ -177,38 +189,34 @@ def forEachFeature(datasource, callback, for_write=False):
            internally. Ifcallback writes to this datasource, set this to True to ensure write privilege.
     :return:
     '''
-    layer, ds = _getLayer(datasource, allow_path=True, for_write=for_write)
+    layer, ds = _get_layer(datasource, allow_path=True, for_write=for_write)
     layer.SetNextByIndex(0)
-    feat = layer.GetNextFeature()
-    while feat:
+    for feat in layer:
         if callback(feat):
             break
-        feat = layer.GetNextFeature()
+    del feat
     layer.SetNextByIndex(0)
     if ds:
         ds.Release()
         del layer, ds
 
 
-def makeValid(datasource):
+def make_valid(datasource):
     '''
     Attempts to validate invalid geometries without losing vertices.
     :param datasource: (ogr.DataSource|ogr.Layer|str) The feature datasource of interest. May be provided as
            ogr.DataSource, ogr.Layer, or filepath.
     '''
-    layer, ds = _getLayer(datasource, allow_path=True, for_write=True)
-    i = 0
+    layer, ds = _get_layer(datasource, allow_path=True, for_write=True)
     layer.SetNextByIndex(0)
-    feat = layer.GetNextFeature()
-    while feat:
+    for feat in layer:
         geom = feat.GetGeometryRef()
         vgeom = geom.MakeValid()
         if not vgeom:
-            raise Exception("Error validating geometry for feature {0}".format(i))
+            raise Exception("Error validating geometry for feature {0}".format(feat.GetFID()))
         feat.SetGeometry(vgeom)
         layer.SetFeature(feat)
-        feat = layer.GetNextFeature()
-        i += 1
+    del vgeom, geom, feat
     layer.SetNextByIndex(0)
     if ds:
         ds.Release()

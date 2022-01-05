@@ -1,9 +1,9 @@
 import sys
 from . import gdal_merge
-from ..rasters import getRasterAsGdal
+from .. import rasters as rasterutils
 
 
-def moasicRasters(input_file_list, output_filepath, no_data_value=None, additional_args=None, open=False):
+def rasters(input_file_list, output_filepath, no_data_value=None, additional_args=None, open=False):
     '''
     Mosaic rasters. Basically a function wrapper for the `gdal_merge` program. Automatically copies raster color table,
     if one exists in the first band of first raster.
@@ -21,7 +21,7 @@ def moasicRasters(input_file_list, output_filepath, no_data_value=None, addition
     if no_data_value is not None:
         args += ["-n", str(no_data_value)]
     # auto grab some arguments from first input file
-    first_raster = getRasterAsGdal(input_file_list[0])
+    first_raster = rasterutils.get_dataset(input_file_list[0])
     first_raster_band = first_raster.GetRasterBand(1)
     if additional_args is not None:
         # additional arguments added as key/value pairs
@@ -37,4 +37,4 @@ def moasicRasters(input_file_list, output_filepath, no_data_value=None, addition
     sys.argv = args + input_file_list
     gdal_merge.main()
     if open:
-        return getRasterAsGdal(output_filepath)
+        return rasterutils.get_dataset(output_filepath)

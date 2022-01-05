@@ -2,14 +2,13 @@ from osgeo import gdal, osr
 from osgeo.gdalconst import *
 
 
-
 GEOTIFF_DRIVER_NAME        = "GTiff"
 ERDAS_IMAGINE_DRIVER_NAME  = "HFA"
 GENERIC_BINARY_DRIVER_NAME = "GENBIN"
 ESRI_GRID_DRIVER_NAME      = "AAIGrid"
 
 
-def guessRasterDriver(path):
+def guess_driver(path):
     '''
     Guess raster driver by filename. Limited support, still needs fleshing out. Throws exception if cannot be
     determined.
@@ -29,17 +28,25 @@ def guessRasterDriver(path):
         raise Exception("Raster file extension not recognized, create raster driver manually.")
 
 
-def getRasterDriver(path):
+def driver(path):
+    return driver(path)
+
+
+def get_driver(path):
     '''
     Get the raster driver by filename. Limited support, still needs fleshing out. Throws exception if cannot be
     determined.
     :param path: (str) Filepath to raster.
     :return: (gdal.Driver)
     '''
-    return gdal.GetDriverByName(guessRasterDriver(path))
+    return gdal.GetDriverByName(guess_driver(path))
 
 
-def getRasterAsGdal(rasterpath):
+def dataset(rasterpath):
+    return get_dataset(rasterpath)
+
+
+def get_dataset(rasterpath):
     '''
     Get raster dataset as gdal.Dataset instance.
     :param rasterpath: (str) The filepath to the raster.
@@ -49,7 +56,11 @@ def getRasterAsGdal(rasterpath):
     return dataset
 
 
-def getRasterSpatialReference(dataset):
+def spatial_reference(dataset):
+    return get_spatial_reference(dataset)
+
+
+def get_spatial_reference(dataset):
     '''
     Get the spatial reference of a raster dataset.
     :param dataset: (gdal.Dataset) The raster dataset.
@@ -61,7 +72,11 @@ def getRasterSpatialReference(dataset):
     return osr.SpatialReference(wkt=prj)
 
 
-def getRasterTransform(dataset):
+def transform(dataset):
+    return get_transform(dataset)
+
+
+def get_transform(dataset):
     '''
     Get the raster transform of a raster dataset.
     :param dataset: (gdal.Dataset) The raster dataset.
@@ -79,7 +94,11 @@ def getRasterTransform(dataset):
     )
 
 
-def calcPixelCoordinate(coordinate, origin=None, pixel_size=None, dataset=None):
+def calc_pixel_coordinates(coordinate, origin=None, pixel_size=None, dataset=None):
+    return calc_pixel_coordinate(coordinate, origin, pixel_size, dataset)
+
+
+def calc_pixel_coordinate(coordinate, origin=None, pixel_size=None, dataset=None):
     '''
     Calculated the pixel coordinates from a given set of coordinates. Must be provided either the raster dataset or both
     the origin and pixel size for a dataset.
@@ -90,24 +109,28 @@ def calcPixelCoordinate(coordinate, origin=None, pixel_size=None, dataset=None):
     :return: (int[]) The pixel coordinates in x/y-distance in pixels from origin.
     '''
     if not origin or not pixel_size:
-        origin, pixel_size, extent = getRasterTransform(dataset)
+        origin, pixel_size, extent = get_transform(dataset)
     return (
         int((coordinate[0] - origin[0]) / pixel_size[0]),
         int((coordinate[1] - origin[1]) / pixel_size[1])
     )
 
 
-def createRasterTransform(origin, pixel_size):
+def create_transform(origin, pixel_size):
     '''
     Create raster transform parameters.
     :param origin: (float[]) Pixel origin.
-    :param pixel_size: (float[]) Pixel sizes.
+    :param pixel_size: (frasterutilsloat[]) Pixel sizes.
     :return: (float[]) The raster transform parameters (origin-x, pixel-size-x, 0, origin-y, 0, pixel-size-y).
     '''
     return [origin[0], pixel_size[0], 0, origin[1], 0, pixel_size[1]]
 
 
-def getNoDataValue(dataset, band):
+def no_data_value(dataset, band):
+    return get_no_data_value(dataset, band)
+
+
+def get_no_data_value(dataset, band):
     '''
     Get the no data value for a raster band.
     :param dataset: (gdal.Dataset) The raster dataset.
@@ -117,7 +140,7 @@ def getNoDataValue(dataset, band):
     return dataset.GetRasterBand(band).GetNoDataValue()
 
 
-def readRaster(dataset, band, offset_x, offset_y, length_x=1, length_y=1):
+def read(dataset, band, offset_x, offset_y, length_x=1, length_y=1):
     '''
     Read and return raster values.
     :param dataset: (gdal.Dataset) The raster dataset.

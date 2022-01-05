@@ -8,7 +8,7 @@ def get(datasource, for_write=False, allow_path=False):
     elif isinstance(datasource, ogr.Layer):
         return datasource, None
     elif allow_path and isinstance(datasource, str):
-        datasource = features.getFeatureDataSource(datasource, write=for_write)
+        datasource = features.get_datasource(datasource, write=for_write)
         layer = datasource.GetLayer()
         return layer, datasource
     else:
