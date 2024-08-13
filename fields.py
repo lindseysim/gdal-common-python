@@ -1,7 +1,7 @@
 from osgeo import ogr
-from date import date
-from lib._getlayer import get as _get_layer
-from Field import Field
+from . import date
+from .lib._getlayer import get as _get_layer
+from .Field import Field
 
 
 # type name gets overwritten by method so reassign for later use
@@ -331,11 +331,10 @@ def calculate(datasource, on_field, use_fields, calc_callback):
         get_fields = None
 
     layer.SetNextByIndex(0)
-    i = 0
-    for feat in layer:
+    for i, feat in enumerate(layer):
         fvalues = [value(feat, field) for field in get_fields] if get_fields else []
         set_value(feat, field, calc_callback(i, feat, fvalues))
-        i += 1
+        layer.SetFeature(feat)
     del feat
     layer.SetNextByIndex(0)
 
@@ -406,8 +405,7 @@ def calc_geometry(datasource, field_name, units):
             raise Exception("Unrecognized unit provided.")
 
         layer.SetNextByIndex(0)
-        feat = layer.GetNextFeature()
-        while feat:
+        for feat in layer:
             geom = feat.GetGeometryRef()
             gvalue = 0
             if gtype == 1:
@@ -416,7 +414,6 @@ def calc_geometry(datasource, field_name, units):
                 gvalue = geom.Area()*multiplier if geom else 0
             feat.SetField(field.name, gvalue)
             layer.SetFeature(feat)
-            feat = layer.GetNextFeature()
         layer.SetNextByIndex(0)
 
         return field
